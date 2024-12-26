@@ -1,0 +1,831 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'API Resources for Commovis LXP API'
+
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [dev, prod]
+    Description: Deployment environment
+    
+  S3CodeBucket:
+    Type: String
+    Description: Bucket containing Lambda code
+    
+  S3CodeKey:
+    Type: String
+    Description: S3 key for Lambda code package
+    
+  StripeKey:
+    Type: String
+    NoEcho: true
+    Description: Stripe secret key
+    
+  StripeWebhookKey:
+    Type: String
+    NoEcho: true
+    Description: Stripe webhook key
+    
+  LambdaRoleArn:
+    Type: String
+    Description: ARN of Lambda execution role
+
+Mappings:
+  EnvironmentMap:
+    dev:
+      domain: 'api.dev.commovis.com'
+      certArn: 'arn:aws:acm:us-east-1:869555217043:certificate/198b1b9e-5615-4d22-be7a-8e1085042e0c'
+      apiDomain: '9xd35yw450.execute-api.eu-west-1.amazonaws.com'
+      logBucket: 'dev-commovis-logging.s3.amazonaws.com'
+    prod:
+      domain: 'api.commovis.com'
+      certArn: 'arn:aws:acm:us-east-1:869555217043:certificate/f8c49ac7-aeb1-4639-aa49-8df6ba5fa651'
+      apiDomain: 'udidfhd4s5.execute-api.eu-west-1.amazonaws.com'
+      logBucket: 'prod-commovis-logging.s3.amazonaws.com'
+
+Resources:
+  # API Gateway
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub ${Environment}-commovis-api
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowHeaders:
+          - Content-Type
+          - X-Amz-Date
+          - Authorization
+          - X-Api-Key
+          - X-Amz-Security-Token
+          - X-Amz-User-Agent
+          - X-Amzn-Trace-Id
+        AllowMethods:
+          - OPTIONS
+          - POST
+          - PUT
+          - DELETE
+          - GET
+        AllowOrigins:
+          - '*'
+
+  HttpApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref HttpApi
+      StageName: $default
+      AutoDeploy: true
+      DefaultRouteSettings:
+        DetailedMetricsEnabled: false
+      AccessLogSettings:
+        DestinationArn: !GetAtt HttpApiLogGroup.Arn
+        Format: '{"requestTime":"$context.requestTime","requestId":"$context.requestId","apiId":"$context.apiId","resourcePath":"$context.routeKey","path":"$context.path","httpMethod":"$context.httpMethod","stage":"$context.stage","status":"$context.status","integrationStatus":"$context.integrationStatus","integrationLatency":"$context.integrationLatency","responseLatency":"$context.responseLatency","responseLength":"$context.responseLength","errorMessage":"$context.error.message","format":"SLS_HTTP_API_LOG","version":"1.0.0"}'
+
+  HttpApiLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/http-api/commovis-api-${Environment}
+
+  # Lambda Functions
+  CommovisAuthorizerUserLambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/commovis-api-${Environment}-commovisAuthorizerUser
+
+  CommovisAuthorizerAdminLambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/commovis-api-${Environment}-commovisAuthorizerAdmin
+
+  CommovisAuthorizerCMmemberLambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/commovis-api-${Environment}-commovisAuthorizerCMmember
+
+  CommovisAuthorizerAdminOrFacilitatorLambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/commovis-api-${Environment}-commovisAuthorizerAdminOrFacilitator
+
+  CombinedJourneyHandlerLambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/commovis-api-${Environment}-combinedJourneyHandler
+
+  CombinedUserTenantHandlerLambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/commovis-api-${Environment}-combinedUserTenantHandler
+
+  CommovisAuthorizerUserFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: CommovisAuthorizerUserLambdaLogGroup
+    Properties:
+      FunctionName: !Sub commovis-api-${Environment}-commovisAuthorizerUser
+      Code:
+        S3Bucket: !Ref S3CodeBucket
+        S3Key: !Ref S3CodeKey
+      Handler: API/auth/authorizer.authorizerUser
+      Runtime: nodejs20.x
+      MemorySize: 512
+      Timeout: 25
+      Environment:
+        Variables:
+          DYNAMODB_TENANT_TABLE: !Sub commovis-api-Tenant-${Environment}
+          DYNAMODB_JOURNEY_TABLE: !Sub commovis-api-Journey-${Environment}
+          DYNAMODB_JOURNEY_PARTICIPANT_RELATION_TABLE: !Sub commovis-api-Journey_Participant_Relation-${Environment}
+          DYNAMODB_JOURNEY_CATEGORY_TABLE: !Sub commovis-api-Journey_Category-${Environment}
+          DYNAMODB_TREASURE_CHEST_TABLE: !Sub commovis-api-Treasure_Chest-${Environment}
+          DYNAMODB_USER_NOTIFICATIONS_TABLE: !Sub commovis-api-User_Notifications-${Environment}
+          DYNAMODB_USER_PREFERENCES_TABLE: !Sub commovis-api-User_Preferences-${Environment}
+          DYNAMODB_JOURNEY_REUSABLE_TEMPLATES_TABLE: !Sub commovis-api-Journey_Reusable_Templates-${Environment}
+          DYNAMODB_INTERNAL_CURRENCY_TABLE: !Sub commovis-api-Internal_Currency-${Environment}
+          DYNAMODB_INTERNAL_CURRENCY_TRANSFERS_TABLE: !Sub commovis-api-Internal_Currency_Transfers-${Environment}
+          DYNAMODB_LEDGER_ENTRY_TABLE: !Sub commovis-api-Ledger_Entry-${Environment}
+          DYNAMODB_ASSIGNMENT_TABLE: !Sub commovis-api-Assignment-${Environment}
+          stage: !Ref Environment
+          STRIPE_SECRET_KEY: !Ref StripeKey
+          STRIPE_WEBHOOK_SECRET: !Ref StripeWebhookKey
+      Role: !Ref LambdaRoleArn
+
+  CommovisAuthorizerAdminFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: CommovisAuthorizerAdminLambdaLogGroup
+    Properties:
+      FunctionName: !Sub commovis-api-${Environment}-commovisAuthorizerAdmin
+      Code:
+        S3Bucket: !Ref S3CodeBucket
+        S3Key: !Ref S3CodeKey
+      Handler: API/auth/authorizer.authorizerAdmin
+      Runtime: nodejs20.x
+      MemorySize: 512
+      Timeout: 25
+      Environment:
+        Variables:
+          DYNAMODB_TENANT_TABLE: !Sub commovis-api-Tenant-${Environment}
+          DYNAMODB_JOURNEY_TABLE: !Sub commovis-api-Journey-${Environment}
+          DYNAMODB_JOURNEY_PARTICIPANT_RELATION_TABLE: !Sub commovis-api-Journey_Participant_Relation-${Environment}
+          DYNAMODB_JOURNEY_CATEGORY_TABLE: !Sub commovis-api-Journey_Category-${Environment}
+          DYNAMODB_TREASURE_CHEST_TABLE: !Sub commovis-api-Treasure_Chest-${Environment}
+          DYNAMODB_USER_NOTIFICATIONS_TABLE: !Sub commovis-api-User_Notifications-${Environment}
+          DYNAMODB_USER_PREFERENCES_TABLE: !Sub commovis-api-User_Preferences-${Environment}
+          DYNAMODB_JOURNEY_REUSABLE_TEMPLATES_TABLE: !Sub commovis-api-Journey_Reusable_Templates-${Environment}
+          DYNAMODB_INTERNAL_CURRENCY_TABLE: !Sub commovis-api-Internal_Currency-${Environment}
+          DYNAMODB_INTERNAL_CURRENCY_TRANSFERS_TABLE: !Sub commovis-api-Internal_Currency_Transfers-${Environment}
+          DYNAMODB_LEDGER_ENTRY_TABLE: !Sub commovis-api-Ledger_Entry-${Environment}
+          DYNAMODB_ASSIGNMENT_TABLE: !Sub commovis-api-Assignment-${Environment}
+          stage: !Ref Environment
+          STRIPE_SECRET_KEY: !Ref StripeKey
+          STRIPE_WEBHOOK_SECRET: !Ref StripeWebhookKey
+      Role: !Ref LambdaRoleArn
+      CombinedJourneyHandlerFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: CombinedJourneyHandlerLambdaLogGroup
+    Properties:
+      FunctionName: !Sub commovis-api-${Environment}-combinedJourneyHandler
+      Code:
+        S3Bucket: !Ref S3CodeBucket
+        S3Key: !Ref S3CodeKey
+      Handler: API/v2/CombinedJourneyHandler.handler
+      Runtime: nodejs20.x
+      MemorySize: 512
+      Timeout: 25
+      Environment:
+        Variables:
+          DYNAMODB_TENANT_TABLE: !Sub commovis-api-Tenant-${Environment}
+          DYNAMODB_JOURNEY_TABLE: !Sub commovis-api-Journey-${Environment}
+          DYNAMODB_JOURNEY_PARTICIPANT_RELATION_TABLE: !Sub commovis-api-Journey_Participant_Relation-${Environment}
+          DYNAMODB_JOURNEY_CATEGORY_TABLE: !Sub commovis-api-Journey_Category-${Environment}
+          DYNAMODB_TREASURE_CHEST_TABLE: !Sub commovis-api-Treasure_Chest-${Environment}
+          DYNAMODB_USER_NOTIFICATIONS_TABLE: !Sub commovis-api-User_Notifications-${Environment}
+          DYNAMODB_USER_PREFERENCES_TABLE: !Sub commovis-api-User_Preferences-${Environment}
+          DYNAMODB_JOURNEY_REUSABLE_TEMPLATES_TABLE: !Sub commovis-api-Journey_Reusable_Templates-${Environment}
+          DYNAMODB_INTERNAL_CURRENCY_TABLE: !Sub commovis-api-Internal_Currency-${Environment}
+          DYNAMODB_INTERNAL_CURRENCY_TRANSFERS_TABLE: !Sub commovis-api-Internal_Currency_Transfers-${Environment}
+          DYNAMODB_LEDGER_ENTRY_TABLE: !Sub commovis-api-Ledger_Entry-${Environment}
+          DYNAMODB_ASSIGNMENT_TABLE: !Sub commovis-api-Assignment-${Environment}
+          stage: !Ref Environment
+          STRIPE_SECRET_KEY: !Ref StripeKey
+          STRIPE_WEBHOOK_SECRET: !Ref StripeWebhookKey
+      Role: !Ref LambdaRoleArn
+      ReservedConcurrentExecutions: 1
+
+  CombinedJourneyHandlerVersion:
+    Type: AWS::Lambda::Version
+    DependsOn: CombinedJourneyHandlerFunction
+    Properties:
+      FunctionName: !Ref CombinedJourneyHandlerFunction
+
+  CombinedJourneyHandlerProvConcLambdaAlias:
+    Type: AWS::Lambda::Alias
+    Properties:
+      FunctionName: !Ref CombinedJourneyHandlerFunction
+      FunctionVersion: !GetAtt CombinedJourneyHandlerVersion.Version
+      Name: provisioned
+      ProvisionedConcurrencyConfig:
+        ProvisionedConcurrentExecutions: 1
+
+  CombinedUserTenantHandlerFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: CombinedUserTenantHandlerLambdaLogGroup
+    Properties:
+      FunctionName: !Sub commovis-api-${Environment}-combinedUserTenantHandler
+      Code:
+        S3Bucket: !Ref S3CodeBucket
+        S3Key: !Ref S3CodeKey
+      Handler: API/v2/CombinedUserTenantHandler.handler
+      Runtime: nodejs20.x
+      MemorySize: 512
+      Timeout: 25
+      Environment:
+        Variables:
+          DYNAMODB_TENANT_TABLE: !Sub commovis-api-Tenant-${Environment}
+          DYNAMODB_JOURNEY_TABLE: !Sub commovis-api-Journey-${Environment}
+          DYNAMODB_JOURNEY_PARTICIPANT_RELATION_TABLE: !Sub commovis-api-Journey_Participant_Relation-${Environment}
+          DYNAMODB_JOURNEY_CATEGORY_TABLE: !Sub commovis-api-Journey_Category-${Environment}
+          DYNAMODB_TREASURE_CHEST_TABLE: !Sub commovis-api-Treasure_Chest-${Environment}
+          DYNAMODB_USER_NOTIFICATIONS_TABLE: !Sub commovis-api-User_Notifications-${Environment}
+          DYNAMODB_USER_PREFERENCES_TABLE: !Sub commovis-api-User_Preferences-${Environment}
+          DYNAMODB_JOURNEY_REUSABLE_TEMPLATES_TABLE: !Sub commovis-api-Journey_Reusable_Templates-${Environment}
+          DYNAMODB_INTERNAL_CURRENCY_TABLE: !Sub commovis-api-Internal_Currency-${Environment}
+          DYNAMODB_INTERNAL_CURRENCY_TRANSFERS_TABLE: !Sub commovis-api-Internal_Currency_Transfers-${Environment}
+          DYNAMODB_LEDGER_ENTRY_TABLE: !Sub commovis-api-Ledger_Entry-${Environment}
+          DYNAMODB_ASSIGNMENT_TABLE: !Sub commovis-api-Assignment-${Environment}
+          stage: !Ref Environment
+          STRIPE_SECRET_KEY: !Ref StripeKey
+          STRIPE_WEBHOOK_SECRET: !Ref StripeWebhookKey
+      Role: !Ref LambdaRoleArn
+      ReservedConcurrentExecutions: 1
+
+  CombinedUserTenantHandlerVersion:
+    Type: AWS::Lambda::Version
+    DependsOn: CombinedUserTenantHandlerFunction
+    Properties:
+      FunctionName: !Ref CombinedUserTenantHandlerFunction
+
+  CombinedUserTenantHandlerProvConcLambdaAlias:
+    Type: AWS::Lambda::Alias
+    Properties:
+      FunctionName: !Ref CombinedUserTenantHandlerFunction
+      FunctionVersion: !GetAtt CombinedUserTenantHandlerVersion.Version
+      Name: provisioned
+      ProvisionedConcurrencyConfig:
+        ProvisionedConcurrentExecutions: 1
+
+  # API Gateway Authorizer Permissions
+  CommovisAuthorizerUserPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt CommovisAuthorizerUserFunction.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*
+
+  CommovisAuthorizerAdminPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt CommovisAuthorizerAdminFunction.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*
+
+  # API Gateway Lambda Permissions
+  CombinedJourneyHandlerPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Sub ${CombinedJourneyHandlerFunction.Arn}:provisioned
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*
+
+  CombinedUserTenantHandlerPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Sub ${CombinedUserTenantHandlerFunction.Arn}:provisioned
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*
+
+# API Gateway Authorizers 
+  HttpApiAuthorizerUser:
+    Type: AWS::ApiGatewayV2::Authorizer
+    Properties:
+      ApiId: !Ref HttpApi
+      AuthorizerType: REQUEST
+      AuthorizerPayloadFormatVersion: "2.0"
+      EnableSimpleResponses: true
+      AuthorizerResultTtlInSeconds: 600
+      IdentitySource:
+        - $request.header.Authorization
+      Name: commovisAuthorizerUser
+      AuthorizerUri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CommovisAuthorizerUserFunction.Arn}/invocations
+
+  HttpApiAuthorizerAdmin:
+    Type: AWS::ApiGatewayV2::Authorizer
+    Properties:
+      ApiId: !Ref HttpApi
+      AuthorizerType: REQUEST
+      AuthorizerPayloadFormatVersion: "2.0"
+      EnableSimpleResponses: true
+      AuthorizerResultTtlInSeconds: 600
+      IdentitySource:
+        - $request.header.Authorization
+      Name: commovisAuthorizerAdmin
+      AuthorizerUri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CommovisAuthorizerAdminFunction.Arn}/invocations
+
+  HttpApiAuthorizerCMmember:
+    Type: AWS::ApiGatewayV2::Authorizer
+    Properties:
+      ApiId: !Ref HttpApi
+      AuthorizerType: REQUEST
+      AuthorizerPayloadFormatVersion: "2.0"
+      EnableSimpleResponses: true
+      AuthorizerResultTtlInSeconds: 600
+      IdentitySource:
+        - $request.header.Authorization
+      Name: commovisAuthorizerCMmember
+      AuthorizerUri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CommovisAuthorizerCMmemberFunction.Arn}/invocations
+
+  HttpApiAuthorizerAdminOrFacilitator:
+    Type: AWS::ApiGatewayV2::Authorizer
+    Properties:
+      ApiId: !Ref HttpApi
+      AuthorizerType: REQUEST
+      AuthorizerPayloadFormatVersion: "2.0"
+      EnableSimpleResponses: true
+      AuthorizerResultTtlInSeconds: 600
+      IdentitySource:
+        - $request.header.Authorization
+      Name: commovisAuthorizerAdminOrFacilitator
+      AuthorizerUri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CommovisAuthorizerAdminOrFacilitatorFunction.Arn}/invocations
+
+  # Add corresponding Lambda permissions for each authorizer
+  CommovisAuthorizerCMmemberPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt CommovisAuthorizerCMmemberFunction.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*
+
+  CommovisAuthorizerAdminOrFacilitatorPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt CommovisAuthorizerAdminOrFacilitatorFunction.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*
+
+
+# API Integrations
+  HttpApiIntegrationCombinedJourneyHandler:
+    Type: AWS::ApiGatewayV2::Integration
+    DependsOn: CombinedJourneyHandlerProvConcLambdaAlias
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub ${CombinedJourneyHandlerFunction.Arn}:provisioned
+      PayloadFormatVersion: "2.0"
+      TimeoutInMillis: 30000
+
+  HttpApiIntegrationCombinedUserTenantHandler:
+    Type: AWS::ApiGatewayV2::Integration
+    DependsOn: CombinedUserTenantHandlerProvConcLambdaAlias
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub ${CombinedUserTenantHandlerFunction.Arn}:provisioned
+      PayloadFormatVersion: "2.0"
+      TimeoutInMillis: 30000
+
+  # Journey Routes
+  HttpApiRoutePostV2JourneyList:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "POST /v2/journey/list"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedJourneyHandler}
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref HttpApiAuthorizerUser
+
+  HttpApiRoutePostV2JourneyListUserJourneys:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "POST /v2/journey/list-user-journeys"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedJourneyHandler}
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref HttpApiAuthorizerUser
+
+  HttpApiRoutePostV2JourneyListAllJourneysNames:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "POST /v2/journey/list-all-journeys-names"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedJourneyHandler}
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref HttpApiAuthorizerUser
+
+  HttpApiRoutePostV2JourneyCreate:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "POST /v2/journey/create"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedJourneyHandler}
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref HttpApiAuthorizerAdminOrFacilitator
+
+  HttpApiRoutePostV2JourneyCopyJourney:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "POST /v2/journey/copy-journey"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedJourneyHandler}
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref HttpApiAuthorizerAdminOrFacilitator
+
+  HttpApiRoutePostV2JourneyCheckChaptersUnlock:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "POST /v2/journey/check-journeys-chapters-unlock"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedJourneyHandler}
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref HttpApiAuthorizerUser
+
+  HttpApiRoutePostV2JourneyUpdateParticipantAssignment:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "POST /v2/journey/update-participant-assignment"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedJourneyHandler}
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref HttpApiAuthorizerUser
+
+  HttpApiRoutePostV2JourneyUpdateConsent:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "POST /v2/journey/update-journey-user-consent"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedJourneyHandler}
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref HttpApiAuthorizerUser
+
+  HttpApiRoutePostV2JourneySubmitAssignment:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "POST /v2/journey/submit-assignment"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedJourneyHandler}
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref HttpApiAuthorizerUser
+
+  HttpApiRoutePostV2ReusableTemplatesAddToPending:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "POST /v2/journey-reusable-templates/add-to-pending"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedJourneyHandler}
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref HttpApiAuthorizerAdminOrFacilitator
+
+  HttpApiRoutePostV2ReusableTemplatesList:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "POST /v2/journey-reusable-templates/list"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedJourneyHandler}
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref HttpApiAuthorizerAdmin
+
+  HttpApiRoutePostV2ReusableTemplatesListReusable:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "POST /v2/journey-reusable-templates/list-reusable-templates"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedJourneyHandler}
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref HttpApiAuthorizerAdminOrFacilitator
+
+  HttpApiRoutePostV2ReusableTemplatesUpdateStatus:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "POST /v2/journey-reusable-templates/update-template-status"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedJourneyHandler}
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref HttpApiAuthorizerAdmin
+  HttpApiRoutePostV2JourneyCategoryList:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "POST /v2/journey-category/list"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedJourneyHandler}
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref HttpApiAuthorizerAdminOrFacilitator
+
+  HttpApiRoutePostV2JourneyCategoryCreate:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "POST /v2/journey-category/create"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedJourneyHandler}
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref HttpApiAuthorizerAdmin
+
+  HttpApiRoutePutV2JourneyCategoryId:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "PUT /v2/journey-category/{ID}"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedJourneyHandler}
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref HttpApiAuthorizerAdmin
+
+  HttpApiRouteDeleteV2JourneyCategoryId:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "DELETE /v2/journey-category/{ID}"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedJourneyHandler}
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref HttpApiAuthorizerAdmin
+
+  HttpApiRoutePostV2AddUserToJourney:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "POST /v2/add-user-to-journey"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedJourneyHandler}
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref HttpApiAuthorizerAdminOrFacilitator
+
+  HttpApiRoutePutV2JourneyId:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "PUT /v2/journey/{ID}"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedJourneyHandler}
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref HttpApiAuthorizerAdminOrFacilitator
+
+  HttpApiRoutePutV2JourneyUpdateActiveStatusId:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "PUT /v2/journey/update-active-status/{ID}"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedJourneyHandler}
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref HttpApiAuthorizerAdminOrFacilitator
+
+  HttpApiRoutePutV2JourneyUpdateAuthorId:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "PUT /v2/journey/update-author/{ID}"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedJourneyHandler}
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref HttpApiAuthorizerAdmin
+
+  # File Management Routes
+  HttpApiRoutePostV2FileCopyToS3Folder:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "POST /v2/file/copy-file-to-S3-folder"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedJourneyHandler}
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref HttpApiAuthorizerAdminOrFacilitator
+
+  HttpApiRouteDeleteV2FileDeleteFile:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "DELETE /v2/file/delete-file"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedJourneyHandler}
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref HttpApiAuthorizerUser
+
+  HttpApiRoutePostV2FileGetDownloadSignedUrl:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "POST /v2/file/get-download-signed-url"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedJourneyHandler}
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref HttpApiAuthorizerUser
+
+  HttpApiRoutePostV2FileGetTenantLogoSignedUrl:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "POST /v2/file/get-tenant-logo-signed-url"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedJourneyHandler}
+
+  HttpApiRoutePostV2FileGetUploadSignedUrl:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "POST /v2/file/get-upload-signed-url"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedJourneyHandler}
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref HttpApiAuthorizerUser
+
+  # User Management Routes
+  HttpApiRoutePostV2CreateUsers:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "POST /v2/create-users"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedUserTenantHandler}
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref HttpApiAuthorizerAdmin
+
+  HttpApiRoutePostV2DeleteUsers:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "POST /v2/delete-users"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedUserTenantHandler}
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref HttpApiAuthorizerAdmin
+
+  HttpApiRouteGetV2UserDevicelist:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "GET /v2/user/devicelist"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedUserTenantHandler}
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref HttpApiAuthorizerUser
+
+  # Internal Currency Routes
+  HttpApiRoutePostV2InternalCurrencyGetAmount:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "POST /v2/internal-currency/get-amount"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedUserTenantHandler}
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref HttpApiAuthorizerUser
+
+  HttpApiRoutePostV2ICCustomerManage:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "POST /v2/ic/customer-manage"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedUserTenantHandler}
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref HttpApiAuthorizerAdminOrFacilitator
+
+  HttpApiRoutePostV2ICInvoiceCreate:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "POST /v2/ic/invoice-create"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedUserTenantHandler}
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref HttpApiAuthorizerAdminOrFacilitator
+
+  HttpApiRoutePostV2ICPaymentConfirmation:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "POST /v2/ic/paymentconfirmation"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedUserTenantHandler}
+
+  HttpApiRoutePostV2ICLedgerEntry:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "POST /v2/ic/ledgerentry"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedUserTenantHandler}
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref HttpApiAuthorizerAdminOrFacilitator
+
+  HttpApiRoutePostV2ResendUsersTemporaryPassword:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "POST /v2/resend-users-temporary-password"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedUserTenantHandler}
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref HttpApiAuthorizerAdminOrFacilitator
+
+  HttpApiRouteGetV2JourneysLinkedToParticipant:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "POST /v2/get-journeys-linked-to-participant"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedJourneyHandler}
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref HttpApiAuthorizerUser
+
+  HttpApiRoutePostV2GetParticipantsLinkedToAuthor:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "POST /v2/get-participants-linked-to-author"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedJourneyHandler}
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref HttpApiAuthorizerAdminOrFacilitator
+
+  HttpApiRoutePostV2RemoveParticipantFromJourney:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "POST /v2/remove-participant-from-journey"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedJourneyHandler}
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref HttpApiAuthorizerAdminOrFacilitator
+
+  HttpApiRoutePostV2UpdateParticipantByAuthor:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "POST /v2/update-participant-by-author"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedJourneyHandler}
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref HttpApiAuthorizerAdminOrFacilitator
+
+  HttpApiRoutePostV2CMVTenants:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "POST /v2/cmv/tenants"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedUserTenantHandler}
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref HttpApiAuthorizerAdmin
+
+  HttpApiRoutePostV2CMVPaymentexport:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "POST /v2/cmv/paymentexport"
+      Target: !Sub integrations/${HttpApiIntegrationCombinedUserTenantHandler}
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref HttpApiAuthorizerAdmin
+  # CloudFront Distribution
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Comment: !Sub ${FindInMap [EnvironmentMap, !Ref Environment, domain]} - serverless deployed
+        HttpVersion: http2
+        IPV6Enabled: true
+        PriceClass: PriceClass_100
+        Aliases:
+          - !FindInMap [EnvironmentMap, !Ref Environment, domain]
+        ViewerCertificate:
+          AcmCertificateArn: !FindInMap [EnvironmentMap, !Ref Environment, certArn]
+          SslSupportMethod: sni-only
+          MinimumProtocolVersion: TLSv1.2_2019
+        Logging:
+          Bucket: !FindInMap [EnvironmentMap, !Ref Environment, logBucket]
+          IncludeCookies: false
+          Prefix: api_
+        Origins:
+          - DomainName: !FindInMap [EnvironmentMap, !Ref Environment, apiDomain]
+            Id: httpApi
+            CustomOriginConfig:
+              HTTPSPort: 443
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols:
+                - TLSv1.2
+        Enabled: true
+        DefaultCacheBehavior:
+          AllowedMethods:
+            - DELETE
+            - GET
+            - HEAD
+            - OPTIONS
+            - PATCH
+            - POST
+            - PUT
+          CachedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          TargetOriginId: httpApi
+          Compress: true
+          SmoothStreaming: false
+          ForwardedValues:
+            QueryString: false
+            Cookies:
+              Forward: none
+            Headers:
+              - Authorization
+              - Origin
+              - Referer
+          ViewerProtocolPolicy: https-only
+
+Outputs:
+  ApiEndpoint:
+    Description: API Gateway endpoint URL
+    Value: !Sub https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com
+    
+  CloudFrontDomain:
+    Description: CloudFront Distribution Domain
+    Value: !GetAtt CloudFrontDistribution.DomainName
+    
+  CloudFrontDistributionId:
+    Description: CloudFront Distribution ID
+    Value: !Ref CloudFrontDistribution

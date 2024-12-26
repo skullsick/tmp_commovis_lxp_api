@@ -1,0 +1,1143 @@
+
+service: commovis-api
+app: commovis-lxp
+org: hairer
+frameworkVersion: "3"
+provider:
+  name: aws
+  runtime: nodejs20.x
+  timeout: 25
+  memorySize: 1024
+  # you can overwrite defaults here
+  stage: ${self:custom.currentStage}
+  region: eu-west-1
+  versionFunctions: false
+  environment:
+    DYNAMODB_TENANT_TABLE: ${self:custom.dynamo_tenant_table}
+    DYNAMODB_JOURNEY_TABLE: ${self:custom.dynamo_journey_table}
+    DYNAMODB_JOURNEY_PARTICIPANT_RELATION_TABLE: ${self:custom.dynamo_journey_participant_relation_table}
+    DYNAMODB_JOURNEY_CATEGORY_TABLE: ${self:custom.dynamo_journey_category_table}
+    DYNAMODB_TREASURE_CHEST_TABLE: ${self:custom.dynamo_treasure_chest_table}
+    DYNAMODB_USER_NOTIFICATIONS_TABLE: ${self:custom.dynamo_user_notifications_table}
+    DYNAMODB_USER_PREFERENCES_TABLE: ${self:custom.dynamo_user_preferences_table}
+    DYNAMODB_JOURNEY_REUSABLE_TEMPLATES_TABLE: ${self:custom.dynamo_journey_reusable_templates_table}
+    DYNAMODB_INTERNAL_CURRENCY_TABLE: ${self:custom.dynamo_internal_currency_table}
+    DYNAMODB_INTERNAL_CURRENCY_TRANSFERS_TABLE: ${self:custom.dynamo_internal_currency_transfers_table}
+    DYNAMODB_LEDGER_ENTRY_TABLE: ${self:custom.dynamo_ledger_entry_table}
+    DYNAMODB_ASSIGNMENT_TABLE: ${self:custom.dynamo_assignment_table}
+    stage: ${self:custom.currentStage}
+    STRIPE_SECRET_KEY: ${param:stripe_key}
+    STRIPE_WEBHOOK_SECRET: ${param:stripe_webhook_key}
+    CMV_TENANT: ${param:cmvTenant}
+    AWS_BEDROCK_REGION: 'us-east-1'
+  httpApi:
+    cors: true
+    authorizers:
+      commovisAuthorizerUser:
+        type: request
+        functionName: commovisAuthorizerUser
+        name: commovisAuthorizerUser
+        resultTtlInSeconds: 600
+        enableSimpleResponses: true
+        payloadVersion: "2.0"
+        identitySource:
+          - $request.header.Authorization
+      commovisAuthorizerAdmin:
+        type: request
+        functionName: commovisAuthorizerAdmin
+        name: commovisAuthorizerAdmin
+        resultTtlInSeconds: 600
+        enableSimpleResponses: true
+        payloadVersion: "2.0"
+        identitySource:
+          - $request.header.Authorization
+      commovisAuthorizerCMmember:
+        type: request
+        functionName: commovisAuthorizerCMmember
+        name: commovisAuthorizerCMmember
+        resultTtlInSeconds: 600
+        enableSimpleResponses: true
+        payloadVersion: "2.0"
+        identitySource:
+          - $request.header.Authorization
+      commovisAuthorizerAdminOrFacilitator:
+        type: request
+        functionName: commovisAuthorizerAdminOrFacilitator
+        name: commovisAuthorizerAdminOrFacilitator
+        resultTtlInSeconds: 600
+        enableSimpleResponses: true
+        payloadVersion: "2.0"
+        identitySource:
+          - $request.header.Authorization
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - bedrock:InvokeModel
+          Resource: "arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-micro-v1:0"
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+          Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:custom.dynamo_tenant_table}"
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+          Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:custom.dynamo_tenant_table}/index/tenantGSI"
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+          Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:custom.dynamo_journey_table}"
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+          Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:custom.dynamo_journey_table}/index/journeyGSI"
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+          Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:custom.dynamo_journey_participant_relation_table}"
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+          Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:custom.dynamo_journey_participant_relation_table}/index/journeyParticipantRelationGSI"
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+          Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:custom.dynamo_journey_category_table}"
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+          Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:custom.dynamo_treasure_chest_table}"
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+          Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:custom.dynamo_treasure_chest_table}/index/treasureChestGSI"
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+          Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:custom.dynamo_user_notifications_table}"
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+          Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:custom.dynamo_user_notifications_table}/index/userNotificationsGSI"
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+          Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:custom.dynamo_user_preferences_table}"
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+          Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:custom.dynamo_user_preferences_table}/index/userPreferencesGSI"
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+          Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:custom.dynamo_internal_currency_table}"
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+          Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:custom.dynamo_internal_currency_table}/index/internalCurrencyGSI"
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+          Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:custom.dynamo_internal_currency_transfers_table}"
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+          Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:custom.dynamo_internal_currency_transfers_table}/index/TenantID-Date-Index"
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+          Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:custom.dynamo_ledger_entry_table}"
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+          Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:custom.dynamo_ledger_entry_table}/index/TenantID-Date-Index"
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+          Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:custom.dynamo_ledger_entry_table}/index/UserID-Date-Index"
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+          Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:custom.dynamo_assignment_table}"
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+          Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:custom.dynamo_assignment_table}/index/assignmentGSI"
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+          Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:custom.dynamo_journey_reusable_templates_table}"
+        - Effect: Allow
+          Action:
+            - cognito-idp:TagResource
+            - cognito-idp:CreateUserPool
+            - cognito-idp:UpdateUserPool
+            - cognito-idp:CreateUserPoolClient
+            - cognito-idp:AdminUpdateUserAttributes
+            - cognito-idp:AddCustomAttributes
+            - cognito-idp:AdminAddUserToGroup
+            - cognito-idp:adminRemoveUserFromGroup
+            - cognito-idp:CreateGroup
+            - cognito-idp:AdminListDevices
+            - cognito-idp:AdminCreateUser
+            - cognito-idp:ListUsers
+            - cognito-idp:AdminListGroupsForUser
+            - cognito-idp:AdminGetUser
+            - cognito-idp:AdminDeleteUser
+            - cognito-idp:ListUsersInGroup
+          Resource: "*"
+        - Effect: Allow
+          Action:
+            - iam:CreateServiceLinkedRole
+          Resource: "arn:aws:iam::*:role/aws-service-role/email.cognito-idp.amazonaws.com"
+        - Effect: Allow
+          Action:
+            - s3:listBucket
+            - s3:putObject
+            - s3:getObject
+            - s3:deleteObject
+          Resource:
+            - "arn:aws:s3:::${self:custom.currentStage}-upload-assets"
+            - "arn:aws:s3:::${self:custom.currentStage}-upload-assets/*"
+
+custom:
+  defaultStage: dev
+  httpApi_baseURL-dev: 9xd35yw450.execute-api.eu-west-1.amazonaws.com
+  httpApi_baseURL-prod: udidfhd4s5.execute-api.eu-west-1.amazonaws.com
+  api_domain: api.dev.commovis.com
+  api_domain_prod: api.commovis.com
+  api_cert: arn:aws:acm:us-east-1:869555217043:certificate/198b1b9e-5615-4d22-be7a-8e1085042e0c
+  api_cert_prod: arn:aws:acm:us-east-1:869555217043:certificate/f8c49ac7-aeb1-4639-aa49-8df6ba5fa651
+  currentStage: ${opt:stage, self:custom.defaultStage}
+  dynamo_tenant_table: ${self:service}-Tenant-${self:custom.currentStage}
+  dynamo_journey_table: ${self:service}-Journey-${self:custom.currentStage}
+  dynamo_journey_participant_relation_table: ${self:service}-Journey_Participant_Relation-${self:custom.currentStage}
+  dynamo_journey_category_table: ${self:service}-Journey_Category-${self:custom.currentStage}
+  dynamo_treasure_chest_table: ${self:service}-Treasure_Chest-${self:custom.currentStage}
+  dynamo_user_notifications_table: ${self:service}-User_Notifications-${self:custom.currentStage}
+  dynamo_user_preferences_table: ${self:service}-User_Preferences-${self:custom.currentStage}
+  dynamo_journey_reusable_templates_table: ${self:service}-Journey_Reusable_Templates-${self:custom.currentStage}
+  dynamo_internal_currency_table: ${self:service}-Internal_Currency-${self:custom.currentStage}
+  dynamo_internal_currency_transfers_table: ${self:service}-Internal_Currency_Transfers-${self:custom.currentStage}
+  dynamo_ledger_entry_table: ${self:service}-Ledger_Entry-${self:custom.currentStage}
+  dynamo_assignment_table: ${self:service}-Assignment-${self:custom.currentStage}
+
+  domain:
+    dev: ${self:custom.api_domain}
+    prod: ${self:custom.api_domain_prod}
+  cert:
+    dev: ${self:custom.api_cert}
+    prod: ${self:custom.api_cert_prod}
+  baserul:
+
+
+
+functions:
+
+  commovisAuthorizerUser:
+    handler: API/auth/authorizer.authorizerUser
+  commovisAuthorizerAdmin:
+    handler: API/auth/authorizer.authorizerAdmin
+  commovisAuthorizerCMmember:
+    handler: API/auth/authorizer.authorizerCMmember
+  commovisAuthorizerAdminOrFacilitator:
+    handler: API/auth/authorizer.authorizerAdminOrFacilitator
+  # auth_create:
+  #   handler: API/auth/create.create
+  #   events:
+  #     - httpApi:
+  #         path: /pool
+  #         method: post
+
+
+
+
+
+##v2 mhairer 31.Jul 2024
+  ## Training, Journeny, Upload and TreasureChest
+  combinedJourneyHandler:
+    provisionedConcurrency: 1
+    handler: API/v2/CombinedJourneyHandler.handler
+    events:
+      - httpApi:
+          path: /v2/journey/adapt-journey-temp
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdmin
+      - httpApi:
+          path: /v2/journey/list
+          method: post
+          authorizer:
+            name: commovisAuthorizerUser
+      - httpApi:
+          path: /v2/journey/list-user-journeys
+          method: post
+          authorizer:
+            name: commovisAuthorizerUser
+      - httpApi:
+          path: /v2/journey/list-all-journeys-names
+          method: post
+          authorizer:
+            name: commovisAuthorizerUser
+      - httpApi:
+          path: /v2/journey/create
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdminOrFacilitator
+      - httpApi:
+          path: /v2/journey/copy-journey
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdminOrFacilitator
+#      - httpApi:
+#          path: /v2/journey/check-journeys-chapters-unlock
+#          method: post
+#          authorizer:
+#            name: commovisAuthorizerUser
+      - httpApi:
+          path: /v2/journey/update-participant-assignment
+          method: post
+          authorizer:
+            name: commovisAuthorizerUser
+      - httpApi:
+          path: /v2/journey/update-journey-user-consent
+          method: post
+          authorizer:
+            name: commovisAuthorizerUser
+      - httpApi:
+          path: /v2/journey/submit-assignment
+          method: post
+          authorizer:
+            name: commovisAuthorizerUser
+      - httpApi:
+          path: /v2/journey/save-assignment-response
+          method: post
+          authorizer:
+            name: commovisAuthorizerUser
+     ## - httpApi:
+     ##     path: /v2/journey/update-template-status
+     ##     method: post
+     ##     authorizer:
+     ##       name: commovisAuthorizerAdmin
+      - httpApi:
+          path: /v2/journey-reusable-templates/add-to-pending
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdminOrFacilitator
+      - httpApi:
+          path: /v2/journey-reusable-templates/list
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdmin
+      - httpApi:
+          path: /v2/journey-reusable-templates/list-reusable-templates
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdminOrFacilitator
+      - httpApi:
+          path: /v2/journey-reusable-templates/update-template-status
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdmin
+      - httpApi:
+          path: /v2/journey-category/list
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdminOrFacilitator
+      - httpApi:
+          path: /v2/journey-category/create
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdmin
+      - httpApi:
+          path: /v2/journey-category/{ID}
+          method: put
+          authorizer:
+            name: commovisAuthorizerAdmin
+      - httpApi:
+          path: /v2/journey-category/{ID}
+          method: delete
+          authorizer:
+            name: commovisAuthorizerAdmin
+      - httpApi:
+          path: /v2/add-user-to-journey
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdminOrFacilitator
+      - httpApi:
+          path: /v2/journey/{ID}
+          method: put
+          authorizer:
+            name: commovisAuthorizerAdminOrFacilitator
+      - httpApi:
+          path: /v2/journey/update-active-status/{ID}
+          method: put
+          authorizer:
+            name: commovisAuthorizerAdminOrFacilitator
+      - httpApi:
+          path: /v2/journey/update-author/{ID}
+          method: put
+          authorizer:
+            name: commovisAuthorizerAdmin
+      - httpApi:
+          path: /v2/list-journeys-images
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdmin
+      - httpApi:
+          path: /v2/get-journeys-linked-to-participant
+          method: post
+          authorizer:
+            name: commovisAuthorizerUser
+      - httpApi:
+          path: /v2/get-participants-linked-to-author
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdminOrFacilitator
+      - httpApi:
+          path: /v2/get-users-linked-to-journey
+          method: post
+          authorizer:
+            name: commovisAuthorizerUser
+      - httpApi:
+          path: /v2/remove-participant-from-journey
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdminOrFacilitator
+      - httpApi:
+          path: /v2/journey/set-participants-progress
+          method: put
+          authorizer:
+            name: commovisAuthorizerAdminOrFacilitator
+      - httpApi:
+          path: /v2/update-participant-by-author
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdminOrFacilitator
+      - httpApi:
+          path: /v2/journey/update-participant-progress
+          method: put
+          authorizer:
+            name: commovisAuthorizerUser  
+      - httpApi:
+          path: /v2/reusable-assets/list-reusable-journeys-images
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdminOrFacilitator
+      - httpApi:
+          path: /v2/reusable-assets/add-existing-image-to-reusable-journeys-images
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdmin
+      - httpApi:
+          path: /v2/journey-delete/{ID}
+          method: delete
+          authorizer:
+            name: commovisAuthorizerAdminOrFacilitator
+      - httpApi:
+          path: /v2/journey/translate
+          method: post
+          authorizer:
+            name : commovisAuthorizerUser
+      ## file handling
+      - httpApi:
+          path: /v2/file/copy-file-to-S3-folder
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdminOrFacilitator
+      - httpApi:
+          path: /v2/file/delete-file
+          method: delete
+          authorizer:
+            name: commovisAuthorizerUser
+      - httpApi:
+          path: /v2/file/get-download-signed-url
+          method: post
+          authorizer:
+            name: commovisAuthorizerUser
+      - httpApi:
+          path: /v2/file/get-tenant-logo-signed-url
+          method: post
+      - httpApi:
+          path: /v2/file/get-upload-signed-url
+          method: post
+          authorizer:
+            name: commovisAuthorizerUser
+      ## upload image training
+      - httpApi:
+          path: /v2/upload/image/upload
+          method: post
+          authorizer:
+            name: commovisAuthorizerUser
+      ## treasure chest
+      - httpApi:
+          path:  /v2/treasure-chest/get-treasure-chest-for-user
+          method: post
+          authorizer:
+            name: commovisAuthorizerUser
+  ## cloudfunction User, Tenant, Notification, Currency
+  combinedUserTenantHandler:
+    provisionedConcurrency: 1
+    handler: API/v2/CombinedUserTenantHandler.handler
+    events:
+    ## tenant 
+      ## image
+      - httpApi:
+          path: /v2/image/{journeyID}/{type}/{imageID}/{size}/{format}
+          method: get
+          authorizer:
+            name: commovisAuthorizerUser
+      - httpApi:
+          path: /v2/tenant
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdmin
+      - httpApi:
+          path: /v2/tenant/{id}
+          method: delete
+          authorizer:
+            name: commovisAuthorizerAdmin
+      - httpApi:
+          path: /v2/tenantinfo/{name}
+          method: post
+
+      - httpApi:
+          path: /v2/tenant/{id}
+          method: put
+          authorizer:
+            name: commovisAuthorizerAdmin
+      #- httpApi: 
+      #    path: /v2/cmv/tenant
+      #    method: post
+      #    authorizer:
+      #      name: commovisAuthorizerAdmin
+      - httpApi: 
+          path: /v2/cmv/tenants
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdmin
+      - httpApi: 
+          path: /v2/cmv/paymentexport
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdmin
+      #- httpApi: 
+      #    path: /v2/cmv/users
+      #    method: post
+      #   authorizer:
+      #      name: commovisAuthorizerAdmin
+      - httpApi:
+          path: /v2/tenant/update-logo
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdmin
+            ## user
+      - httpApi:
+          path: /v2/add-custom-attributes-to-user-pool
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdmin
+      - httpApi:
+          path: /v2/align-users-expiration-date
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdmin
+      - httpApi:
+          path: /v2/check-existing-users
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdminOrFacilitator
+      - httpApi:
+          path: /v2/create-users
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdmin
+      - httpApi:
+          path: /v2/delete-users
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdmin
+      - httpApi:
+          path: /v2/user/devicelist
+          method: get
+          authorizer:
+            name: commovisAuthorizerUser
+      - httpApi:
+          path: /v2/list-users
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdmin
+      - httpApi:
+          path: /v2/list-users-by-role
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdminOrFacilitator
+      - httpApi:
+          path: /v2/tenant-admin-update-users
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdmin
+      - httpApi:
+          path: /v2/user/{id}
+          method: put
+          authorizer:
+            name: commovisAuthorizerUser
+      - httpApi:
+          path: /v2/user/picture/{id}
+          method: put
+          authorizer:
+            name: commovisAuthorizerUser
+      - httpApi:
+          path: /v2/user-update-roles/{ID}
+          method: put
+          authorizer:
+            name: commovisAuthorizerAdmin
+      - httpApi:
+          path: /v2/user/verifyUserEmail
+          method: post
+          authorizer:
+            name: commovisAuthorizerUser
+      - httpApi:
+          path: /v2/upload/profile/check
+          method: post
+          authorizer:
+            name: commovisAuthorizerUser
+            ## user notifications
+      - httpApi:
+          path: /v2/user-notifications/get
+          method: post
+          authorizer:
+            name: commovisAuthorizerUser
+      - httpApi:
+          path: /v2/user-notifications/{ID}
+          method: delete
+          authorizer:
+            name: commovisAuthorizerUser
+            ## user preferences
+      - httpApi:
+          path: /v2/user-preferences/get
+          method: post
+          authorizer:
+            name: commovisAuthorizerUser
+      - httpApi:
+          path: /v2/user-preferences/update-journeys-notes
+          method: post
+          authorizer:
+            name: commovisAuthorizerUser
+      - httpApi:
+          path: /v2/user-preferences/update-language
+          method: post
+          authorizer:
+            name: commovisAuthorizerUser
+      - httpApi:
+          path: /v2/user-preferences/update-last-journey-id
+          method: post
+          authorizer:
+            name: commovisAuthorizerUser
+      - httpApi:
+          path: /v2/user-preferences/update-tags
+          method: post
+          authorizer:
+            name: commovisAuthorizerUser
+      - httpApi:
+          path:  /v2/user-preferences/update-treasure-chest-filters
+          method: post
+          authorizer:
+            name: commovisAuthorizerUser
+      - httpApi:
+          path: /v2/user-preferences/update-user-extra-attributes
+          method: post
+          authorizer:
+            name: commovisAuthorizerUser
+            ## internal currency
+      - httpApi:
+          path: /v2/internal-currency/get-amount
+          method: post
+          authorizer:
+            name: commovisAuthorizerUser
+      - httpApi:
+          path: /v2/internal-currency/transfer-user-commovis-credits
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdminOrFacilitator
+      - httpApi:
+          path: /v2/internal-currency/get-user-internal-currency-transfers
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdminOrFacilitator
+      #- httpApi:
+      #    path: /v2/internal-currency/get-payment-link
+      #    method: post
+      #    authorizer:
+      #      name: commovisAuthorizerAdminOrFacilitator
+     #- httpApi:
+     #     path: /v2/internal-currency/on-payment-success
+     #     method: post
+     #     authorizer:
+     #       name: commovisAuthorizerAdminOrFacilitator
+      - httpApi:
+          path: /v2/ic/customer-manage
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdminOrFacilitator
+      - httpApi:
+          path: /v2/ic/invoice-create
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdminOrFacilitator
+      - httpApi:
+          path: /v2/ic/paymentconfirmation
+          method: post
+      - httpApi:
+          path: /v2/ic/ledgerentry
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdminOrFacilitator
+      - httpApi:
+          path: /v2/resend-users-temporary-password
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdminOrFacilitator
+#end v2 mhairer 31.Jul 2024
+
+resources:
+  Resources:
+
+    TenantDynamoDbTable:
+      Type: "AWS::DynamoDB::Table"
+      DeletionPolicy: Delete
+      Properties:
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+          - AttributeName: tenantname
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        TableName: ${self:custom.dynamo_tenant_table}
+        GlobalSecondaryIndexes:
+          - IndexName: tenantGSI
+            KeySchema:
+              - AttributeName: tenantname
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+            ProvisionedThroughput:
+              ReadCapacityUnits: 1
+              WriteCapacityUnits: 1
+
+    JourneyDynamoDbTable:
+      Type: "AWS::DynamoDB::Table"
+      Properties:
+        TableName: ${self:custom.dynamo_journey_table}
+        AttributeDefinitions:
+          - AttributeName: ID
+            AttributeType: S
+          - AttributeName: AuthorID
+            AttributeType: S
+        KeySchema:
+          - AttributeName: ID
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        GlobalSecondaryIndexes:
+          - IndexName: journeyGSI
+            KeySchema:
+              - AttributeName: AuthorID
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+            ProvisionedThroughput:
+              ReadCapacityUnits: 1
+              WriteCapacityUnits: 1
+
+    JourneyParticipantRelationDynamoDbTable:
+      Type: "AWS::DynamoDB::Table"
+      Properties:
+        TableName: ${self:custom.dynamo_journey_participant_relation_table}
+        AttributeDefinitions:
+          - AttributeName: ID
+            AttributeType: S
+          - AttributeName: JourneyID
+            AttributeType: S
+        KeySchema:
+          - AttributeName: ID
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        GlobalSecondaryIndexes:
+          - IndexName: journeyParticipantRelationGSI
+            KeySchema:
+              - AttributeName: JourneyID
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+            ProvisionedThroughput:
+              ReadCapacityUnits: 1
+              WriteCapacityUnits: 1
+
+    JourneyCategoryDynamoDbTable:
+      Type: "AWS::DynamoDB::Table"
+      Properties:
+        TableName: ${self:custom.dynamo_journey_category_table}
+        AttributeDefinitions:
+          - AttributeName: ID
+            AttributeType: S
+        KeySchema:
+          - AttributeName: ID
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+
+    TreasureChestDynamoDbTable:
+      Type: "AWS::DynamoDB::Table"
+      Properties:
+        TableName: ${self:custom.dynamo_treasure_chest_table}
+        AttributeDefinitions:
+          - AttributeName: ID
+            AttributeType: S
+          - AttributeName: UserID
+            AttributeType: S
+        KeySchema:
+          - AttributeName: ID
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        GlobalSecondaryIndexes:
+          - IndexName: treasureChestGSI
+            KeySchema:
+              - AttributeName: UserID
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+            ProvisionedThroughput:
+              ReadCapacityUnits: 1
+              WriteCapacityUnits: 1
+
+    UserNotificationsDynamoDbTable:
+      Type: "AWS::DynamoDB::Table"
+      Properties:
+        TableName: ${self:custom.dynamo_user_notifications_table}
+        AttributeDefinitions:
+          - AttributeName: ID
+            AttributeType: S
+          - AttributeName: UserID
+            AttributeType: S
+        KeySchema:
+          - AttributeName: ID
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        GlobalSecondaryIndexes:
+          - IndexName: userNotificationsGSI
+            KeySchema:
+              - AttributeName: UserID
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+            ProvisionedThroughput:
+              ReadCapacityUnits: 1
+              WriteCapacityUnits: 1
+
+    UserPreferencesDynamoDbTable:
+      Type: "AWS::DynamoDB::Table"
+      Properties:
+        TableName: ${self:custom.dynamo_user_preferences_table}
+        AttributeDefinitions:
+          - AttributeName: ID
+            AttributeType: S
+          - AttributeName: UserID
+            AttributeType: S
+        KeySchema:
+          - AttributeName: ID
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        GlobalSecondaryIndexes:
+          - IndexName: userPreferencesGSI
+            KeySchema:
+              - AttributeName: UserID
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+            ProvisionedThroughput:
+              ReadCapacityUnits: 1
+              WriteCapacityUnits: 1
+
+    JourneyResuableTemplatesDynamoDbTable:
+      Type: "AWS::DynamoDB::Table"
+      Properties:
+        TableName: ${self:custom.dynamo_journey_reusable_templates_table}
+        AttributeDefinitions:
+          - AttributeName: ID
+            AttributeType: S
+        KeySchema:
+          - AttributeName: ID
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+
+    InternalCurrencyDynamoDbTable:
+      Type: "AWS::DynamoDB::Table"
+      Properties:
+        TableName: ${self:custom.dynamo_internal_currency_table}
+        AttributeDefinitions:
+          - AttributeName: ID
+            AttributeType: S
+          - AttributeName: OwnerID
+            AttributeType: S
+        KeySchema:
+          - AttributeName: ID
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        GlobalSecondaryIndexes:
+          - IndexName: internalCurrencyGSI
+            KeySchema:
+              - AttributeName: OwnerID
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+            ProvisionedThroughput:
+              ReadCapacityUnits: 1
+              WriteCapacityUnits: 1
+
+    InternalCurrencyTransfersDynamoDbTable:
+      Type: "AWS::DynamoDB::Table"
+      Properties:
+        TableName: ${self:custom.dynamo_internal_currency_transfers_table}
+        AttributeDefinitions:
+          - AttributeName: ID
+            AttributeType: S
+          - AttributeName: TenantID
+            AttributeType: S
+          - AttributeName: Date
+            AttributeType: S
+        KeySchema:
+          - AttributeName: ID
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        GlobalSecondaryIndexes:
+          - IndexName: TenantID-Date-Index
+            KeySchema:
+              - AttributeName: TenantID
+                KeyType: HASH
+              - AttributeName: Date
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+            ProvisionedThroughput:
+              ReadCapacityUnits: 1
+              WriteCapacityUnits: 1
+
+    LedgerEntryDynamoDbTable:
+      Type: "AWS::DynamoDB::Table"
+      Properties:
+        TableName: ${self:custom.dynamo_ledger_entry_table}
+        AttributeDefinitions:
+          - AttributeName: ID
+            AttributeType: S
+          - AttributeName: TenantID
+            AttributeType: S
+          - AttributeName: UserID
+            AttributeType: S
+          - AttributeName: Date
+            AttributeType: S
+        KeySchema:
+          - AttributeName: ID
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        GlobalSecondaryIndexes:
+          - IndexName: TenantID-Date-Index
+            KeySchema:
+              - AttributeName: TenantID
+                KeyType: HASH
+              - AttributeName: Date
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+            ProvisionedThroughput:
+              ReadCapacityUnits: 1
+              WriteCapacityUnits: 1
+          - IndexName: UserID-Date-Index
+            KeySchema:
+              - AttributeName: UserID
+                KeyType: HASH
+              - AttributeName: Date
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+            ProvisionedThroughput:
+              ReadCapacityUnits: 1
+              WriteCapacityUnits: 1
+
+    AssignmentDynamoDbTable:
+      Type: "AWS::DynamoDB::Table"
+      Properties:
+        TableName: ${self:custom.dynamo_assignment_table}
+        AttributeDefinitions:
+          - AttributeName: ID
+            AttributeType: S
+          - AttributeName: JourneyID
+            AttributeType: S
+        KeySchema:
+          - AttributeName: ID
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        GlobalSecondaryIndexes:
+          - IndexName: assignmentGSI
+            KeySchema:
+              - AttributeName: JourneyID
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+            ProvisionedThroughput:
+              ReadCapacityUnits: 1
+              WriteCapacityUnits: 1
+
+    CloudFrontDistribution:
+      Type: AWS::CloudFront::Distribution
+      Properties:
+        DistributionConfig:
+          Comment: ${self:custom.domain.${self:custom.currentStage}} - serverless deployed
+          HttpVersion: http2
+          IPV6Enabled: true
+          PriceClass: PriceClass_100
+          Aliases:
+            - ${self:custom.domain.${self:custom.currentStage}}
+          ViewerCertificate:
+            AcmCertificateArn: ${self:custom.cert.${self:custom.currentStage}}
+            SslSupportMethod: sni-only
+            MinimumProtocolVersion: TLSv1.2_2019
+          Logging:
+            Bucket: ${self:custom.currentStage}-commovis-logging.s3.amazonaws.com
+            IncludeCookies: false
+            Prefix: api_
+          Origins:
+            - DomainName: ${self:custom.httpApi_baseURL-${self:custom.currentStage}}
+              Id: httpApi
+              CustomOriginConfig:
+                HTTPSPort: 443
+                OriginProtocolPolicy: https-only
+                OriginSSLProtocols:
+                  - TLSv1.2
+          Enabled: true
+          DefaultCacheBehavior:
+            AllowedMethods:
+              - DELETE
+              - GET
+              - HEAD
+              - OPTIONS
+              - PATCH
+              - POST
+              - PUT
+            CachedMethods:
+              - GET
+              - HEAD
+              - OPTIONS
+            TargetOriginId: httpApi
+            Compress: true
+            SmoothStreaming: false
+            ForwardedValues:
+              QueryString: false
+              Cookies:
+                Forward: none
+              Headers:
+                - Authorization
+                - Origin
+                - Referer
+            ViewerProtocolPolicy: https-only
+

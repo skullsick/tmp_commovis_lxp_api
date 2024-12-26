@@ -1,0 +1,145 @@
+##v2 mhairer 31.Jul 2024
+  combinedJourneyHandler:
+    handler: API/v2/CombinedJourneyHandler.handler
+    provisionedConcurrency: 2
+    events:
+      - httpApi:
+          path: /v2/journey/list
+          method: post
+          authorizer:
+            name: commovisAuthorizerUser
+      - httpApi:
+          path: /v2/journey/list-user-journeys
+          method: post
+          authorizer:
+            name: commovisAuthorizerUser
+      - httpApi:
+          path: /v2/journey/list-all-journeys-names
+          method: post
+          authorizer:
+            name: commovisAuthorizerUser
+      - httpApi:
+          path: /v2/journey/create
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdminOrFacilitator
+      - httpApi:
+          path: /v2/journey/copy-journey
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdminOrFacilitator
+      - httpApi:
+          path: /v2/journey/check-journeys-chapters-unlock
+          method: post
+          authorizer:
+            name: commovisAuthorizerUser
+      - httpApi:
+          path: /v2/journey/update-participant-assignment
+          method: post
+          authorizer:
+            name: commovisAuthorizerUser
+      - httpApi:
+          path: /v2/journey/update-journey-user-consent
+          method: post
+          authorizer:
+            name: commovisAuthorizerUser
+      - httpApi:
+          path: /v2/journey/update-template-status
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdmin
+      - httpApi:
+          path: /v2/journey-reusable-templates/add-to-pending
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdminOrFacilitator
+      - httpApi:
+          path: /v2/journey-reusable-templates/list
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdmin
+      - httpApi:
+          path: /v2/journey-reusable-templates/list-reusable-templates
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdminOrFacilitator
+      - httpApi:
+          path: /v2/journey-category/list
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdminOrFacilitator
+      - httpApi:
+          path: /v2/journey-category/create
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdmin
+      - httpApi:
+          path: /v2/journey-category/{ID}
+          method: put
+          authorizer:
+            name: commovisAuthorizerAdmin
+      - httpApi:
+          path: /v2/journey-category/{ID}
+          method: delete
+          authorizer:
+            name: commovisAuthorizerAdmin
+      - httpApi:
+          path: /v2/journey-user-relation/add-user-to-journey
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdminOrFacilitator
+      - httpApi:
+          path: /v2/journey/{ID}
+          method: put
+          authorizer:
+            name: commovisAuthorizerAdminOrFacilitator
+      - httpApi:
+          path: /v2/journey/update-active-status/{ID}
+          method: put
+          authorizer:
+            name: commovisAuthorizerAdminOrFacilitator
+      - httpApi:
+          path: /v2/journey/update-author/{ID}
+          method: put
+          authorizer:
+            name: commovisAuthorizerAdmin
+      - httpApi:
+          path: /v2/list-journeys-images
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdmin
+      - httpApi:
+          path: /v2/get-journeys-linked-to-participant
+          method: post
+          authorizer:
+            name: commovisAuthorizerUser
+      - httpApi:
+          path: /v2/get-participants-linked-to-author
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdminOrFacilitator
+      - httpApi:
+          path: /v2/get-users-linked-to-journey
+          method: post
+          authorizer:
+            name: commovisAuthorizerUser
+      - httpApi:
+          path: /v2/remove-participant-from-journey
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdminOrFacilitator
+      - httpApi:
+          path: /v2/journey/set-participants-progress
+          method: put
+          authorizer:
+            name: commovisAuthorizerAdminOrFacilitator
+      - httpApi:
+          path: /v2/update-participant-by-author
+          method: post
+          authorizer:
+            name: commovisAuthorizerAdminOrFacilitator
+      - httpApi:
+          path: /v2/journey/update-participant-progress
+          method: put
+          authorizer:
+            name: commovisAuthorizerUser

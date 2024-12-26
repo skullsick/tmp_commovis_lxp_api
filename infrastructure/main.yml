@@ -1,0 +1,316 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Main infrastructure stack for Commovis LXP API'
+
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [dev, prod]
+    Description: Deployment environment
+    
+  S3CodeBucket:
+    Type: String
+    Description: Bucket containing Lambda code
+    
+  S3CodeKey:
+    Type: String
+    Description: S3 key for Lambda code package
+    
+  StripeKey:
+    Type: String
+    NoEcho: true
+    Description: Stripe secret key
+    
+  StripeWebhookKey:
+    Type: String
+    NoEcho: true
+    Description: Stripe webhook key
+
+Resources:
+  # Import nested stacks
+  DynamoDBStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://${S3CodeBucket}.s3.${AWS::Region}.amazonaws.com/infrastructure/dynamodb.yml
+      Parameters:
+        Environment: !Ref Environment
+        ServiceName: commovis-api
+
+  APIStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://${S3CodeBucket}.s3.${AWS::Region}.amazonaws.com/infrastructure/api.yml
+      Parameters:
+        Environment: !Ref Environment
+        S3CodeBucket: !Ref S3CodeBucket
+        S3CodeKey: !Ref S3CodeKey
+        StripeKey: !Ref StripeKey
+        StripeWebhookKey: !Ref StripeWebhookKey
+        LambdaRoleArn: !GetAtt IAMStack.Outputs.LambdaRoleArn
+
+  IAMStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://${S3CodeBucket}.s3.${AWS::Region}.amazonaws.com/infrastructure/iam.yml
+      Parameters:
+        Environment: !Ref Environment
+
+  # Lambda Log Groups
+  CommovisAuthorizerUserLambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/commovis-api-${Environment}-commovisAuthorizerUser
+
+  CommovisAuthorizerAdminLambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/commovis-api-${Environment}-commovisAuthorizerAdmin
+
+  CommovisAuthorizerCMmemberLambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/commovis-api-${Environment}-commovisAuthorizerCMmember
+
+  CommovisAuthorizerAdminOrFacilitatorLambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/commovis-api-${Environment}-commovisAuthorizerAdminOrFacilitator
+
+  CombinedJourneyHandlerLambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/commovis-api-${Environment}-combinedJourneyHandler
+
+  CombinedUserTenantHandlerLambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/commovis-api-${Environment}-combinedUserTenantHandler
+# Lambda Functions
+  CommovisAuthorizerUserFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: CommovisAuthorizerUserLambdaLogGroup
+    Properties:
+      FunctionName: !Sub commovis-api-${Environment}-commovisAuthorizerUser
+      Code:
+        S3Bucket: !Ref S3CodeBucket
+        S3Key: !Ref S3CodeKey
+      Handler: API/auth/authorizer.authorizerUser
+      Runtime: nodejs20.x
+      MemorySize: 512
+      Timeout: 25
+      Environment:
+        Variables:
+          DYNAMODB_TENANT_TABLE: !Sub commovis-api-Tenant-${Environment}
+          DYNAMODB_JOURNEY_TABLE: !Sub commovis-api-Journey-${Environment}
+          DYNAMODB_JOURNEY_PARTICIPANT_RELATION_TABLE: !Sub commovis-api-Journey_Participant_Relation-${Environment}
+          DYNAMODB_JOURNEY_CATEGORY_TABLE: !Sub commovis-api-Journey_Category-${Environment}
+          DYNAMODB_TREASURE_CHEST_TABLE: !Sub commovis-api-Treasure_Chest-${Environment}
+          DYNAMODB_USER_NOTIFICATIONS_TABLE: !Sub commovis-api-User_Notifications-${Environment}
+          DYNAMODB_USER_PREFERENCES_TABLE: !Sub commovis-api-User_Preferences-${Environment}
+          DYNAMODB_JOURNEY_REUSABLE_TEMPLATES_TABLE: !Sub commovis-api-Journey_Reusable_Templates-${Environment}
+          DYNAMODB_INTERNAL_CURRENCY_TABLE: !Sub commovis-api-Internal_Currency-${Environment}
+          DYNAMODB_INTERNAL_CURRENCY_TRANSFERS_TABLE: !Sub commovis-api-Internal_Currency_Transfers-${Environment}
+          DYNAMODB_LEDGER_ENTRY_TABLE: !Sub commovis-api-Ledger_Entry-${Environment}
+          DYNAMODB_ASSIGNMENT_TABLE: !Sub commovis-api-Assignment-${Environment}
+          stage: !Ref Environment
+          STRIPE_SECRET_KEY: !Ref StripeKey
+          STRIPE_WEBHOOK_SECRET: !Ref StripeWebhookKey
+      Role: !GetAtt IAMStack.Outputs.LambdaRoleArn
+
+  CommovisAuthorizerAdminFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: CommovisAuthorizerAdminLambdaLogGroup
+    Properties:
+      FunctionName: !Sub commovis-api-${Environment}-commovisAuthorizerAdmin
+      Code:
+        S3Bucket: !Ref S3CodeBucket
+        S3Key: !Ref S3CodeKey
+      Handler: API/auth/authorizer.authorizerAdmin
+      Runtime: nodejs20.x
+      MemorySize: 512
+      Timeout: 25
+      Environment:
+        Variables:
+          DYNAMODB_TENANT_TABLE: !Sub commovis-api-Tenant-${Environment}
+          DYNAMODB_JOURNEY_TABLE: !Sub commovis-api-Journey-${Environment}
+          DYNAMODB_JOURNEY_PARTICIPANT_RELATION_TABLE: !Sub commovis-api-Journey_Participant_Relation-${Environment}
+          DYNAMODB_JOURNEY_CATEGORY_TABLE: !Sub commovis-api-Journey_Category-${Environment}
+          DYNAMODB_TREASURE_CHEST_TABLE: !Sub commovis-api-Treasure_Chest-${Environment}
+          DYNAMODB_USER_NOTIFICATIONS_TABLE: !Sub commovis-api-User_Notifications-${Environment}
+          DYNAMODB_USER_PREFERENCES_TABLE: !Sub commovis-api-User_Preferences-${Environment}
+          DYNAMODB_JOURNEY_REUSABLE_TEMPLATES_TABLE: !Sub commovis-api-Journey_Reusable_Templates-${Environment}
+          DYNAMODB_INTERNAL_CURRENCY_TABLE: !Sub commovis-api-Internal_Currency-${Environment}
+          DYNAMODB_INTERNAL_CURRENCY_TRANSFERS_TABLE: !Sub commovis-api-Internal_Currency_Transfers-${Environment}
+          DYNAMODB_LEDGER_ENTRY_TABLE: !Sub commovis-api-Ledger_Entry-${Environment}
+          DYNAMODB_ASSIGNMENT_TABLE: !Sub commovis-api-Assignment-${Environment}
+          stage: !Ref Environment
+          STRIPE_SECRET_KEY: !Ref StripeKey
+          STRIPE_WEBHOOK_SECRET: !Ref StripeWebhookKey
+      Role: !GetAtt IAMStack.Outputs.LambdaRoleArn
+
+  CommovisAuthorizerCMmemberFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: CommovisAuthorizerCMmemberLambdaLogGroup
+    Properties:
+      FunctionName: !Sub commovis-api-${Environment}-commovisAuthorizerCMmember
+      Code:
+        S3Bucket: !Ref S3CodeBucket
+        S3Key: !Ref S3CodeKey
+      Handler: API/auth/authorizer.authorizerCMmember
+      Runtime: nodejs20.x
+      MemorySize: 512
+      Timeout: 25
+      Environment:
+        Variables:
+          DYNAMODB_TENANT_TABLE: !Sub commovis-api-Tenant-${Environment}
+          DYNAMODB_JOURNEY_TABLE: !Sub commovis-api-Journey-${Environment}
+          DYNAMODB_JOURNEY_PARTICIPANT_RELATION_TABLE: !Sub commovis-api-Journey_Participant_Relation-${Environment}
+          DYNAMODB_JOURNEY_CATEGORY_TABLE: !Sub commovis-api-Journey_Category-${Environment}
+          DYNAMODB_TREASURE_CHEST_TABLE: !Sub commovis-api-Treasure_Chest-${Environment}
+          DYNAMODB_USER_NOTIFICATIONS_TABLE: !Sub commovis-api-User_Notifications-${Environment}
+          DYNAMODB_USER_PREFERENCES_TABLE: !Sub commovis-api-User_Preferences-${Environment}
+          DYNAMODB_JOURNEY_REUSABLE_TEMPLATES_TABLE: !Sub commovis-api-Journey_Reusable_Templates-${Environment}
+          DYNAMODB_INTERNAL_CURRENCY_TABLE: !Sub commovis-api-Internal_Currency-${Environment}
+          DYNAMODB_INTERNAL_CURRENCY_TRANSFERS_TABLE: !Sub commovis-api-Internal_Currency_Transfers-${Environment}
+          DYNAMODB_LEDGER_ENTRY_TABLE: !Sub commovis-api-Ledger_Entry-${Environment}
+          DYNAMODB_ASSIGNMENT_TABLE: !Sub commovis-api-Assignment-${Environment}
+          stage: !Ref Environment
+          STRIPE_SECRET_KEY: !Ref StripeKey
+          STRIPE_WEBHOOK_SECRET: !Ref StripeWebhookKey
+      Role: !GetAtt IAMStack.Outputs.LambdaRoleArn
+CommovisAuthorizerAdminOrFacilitatorFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: CommovisAuthorizerAdminOrFacilitatorLambdaLogGroup
+    Properties:
+      FunctionName: !Sub commovis-api-${Environment}-commovisAuthorizerAdminOrFacilitator
+      Code:
+        S3Bucket: !Ref S3CodeBucket
+        S3Key: !Ref S3CodeKey
+      Handler: API/auth/authorizer.authorizerAdminOrFacilitator
+      Runtime: nodejs20.x
+      MemorySize: 512
+      Timeout: 25
+      Environment:
+        Variables:
+          DYNAMODB_TENANT_TABLE: !Sub commovis-api-Tenant-${Environment}
+          DYNAMODB_JOURNEY_TABLE: !Sub commovis-api-Journey-${Environment}
+          DYNAMODB_JOURNEY_PARTICIPANT_RELATION_TABLE: !Sub commovis-api-Journey_Participant_Relation-${Environment}
+          DYNAMODB_JOURNEY_CATEGORY_TABLE: !Sub commovis-api-Journey_Category-${Environment}
+          DYNAMODB_TREASURE_CHEST_TABLE: !Sub commovis-api-Treasure_Chest-${Environment}
+          DYNAMODB_USER_NOTIFICATIONS_TABLE: !Sub commovis-api-User_Notifications-${Environment}
+          DYNAMODB_USER_PREFERENCES_TABLE: !Sub commovis-api-User_Preferences-${Environment}
+          DYNAMODB_JOURNEY_REUSABLE_TEMPLATES_TABLE: !Sub commovis-api-Journey_Reusable_Templates-${Environment}
+          DYNAMODB_INTERNAL_CURRENCY_TABLE: !Sub commovis-api-Internal_Currency-${Environment}
+          DYNAMODB_INTERNAL_CURRENCY_TRANSFERS_TABLE: !Sub commovis-api-Internal_Currency_Transfers-${Environment}
+          DYNAMODB_LEDGER_ENTRY_TABLE: !Sub commovis-api-Ledger_Entry-${Environment}
+          DYNAMODB_ASSIGNMENT_TABLE: !Sub commovis-api-Assignment-${Environment}
+          stage: !Ref Environment
+          STRIPE_SECRET_KEY: !Ref StripeKey
+          STRIPE_WEBHOOK_SECRET: !Ref StripeWebhookKey
+      Role: !GetAtt IAMStack.Outputs.LambdaRoleArn
+
+  CombinedJourneyHandlerFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: CombinedJourneyHandlerLambdaLogGroup
+    Properties:
+      FunctionName: !Sub commovis-api-${Environment}-combinedJourneyHandler
+      Code:
+        S3Bucket: !Ref S3CodeBucket
+        S3Key: !Ref S3CodeKey
+      Handler: API/v2/CombinedJourneyHandler.handler
+      Runtime: nodejs20.x
+      MemorySize: 512
+      Timeout: 25
+      Environment:
+        Variables:
+          DYNAMODB_TENANT_TABLE: !Sub commovis-api-Tenant-${Environment}
+          DYNAMODB_JOURNEY_TABLE: !Sub commovis-api-Journey-${Environment}
+          DYNAMODB_JOURNEY_PARTICIPANT_RELATION_TABLE: !Sub commovis-api-Journey_Participant_Relation-${Environment}
+          DYNAMODB_JOURNEY_CATEGORY_TABLE: !Sub commovis-api-Journey_Category-${Environment}
+          DYNAMODB_TREASURE_CHEST_TABLE: !Sub commovis-api-Treasure_Chest-${Environment}
+          DYNAMODB_USER_NOTIFICATIONS_TABLE: !Sub commovis-api-User_Notifications-${Environment}
+          DYNAMODB_USER_PREFERENCES_TABLE: !Sub commovis-api-User_Preferences-${Environment}
+          DYNAMODB_JOURNEY_REUSABLE_TEMPLATES_TABLE: !Sub commovis-api-Journey_Reusable_Templates-${Environment}
+          DYNAMODB_INTERNAL_CURRENCY_TABLE: !Sub commovis-api-Internal_Currency-${Environment}
+          DYNAMODB_INTERNAL_CURRENCY_TRANSFERS_TABLE: !Sub commovis-api-Internal_Currency_Transfers-${Environment}
+          DYNAMODB_LEDGER_ENTRY_TABLE: !Sub commovis-api-Ledger_Entry-${Environment}
+          DYNAMODB_ASSIGNMENT_TABLE: !Sub commovis-api-Assignment-${Environment}
+          stage: !Ref Environment
+          STRIPE_SECRET_KEY: !Ref StripeKey
+          STRIPE_WEBHOOK_SECRET: !Ref StripeWebhookKey
+      Role: !GetAtt IAMStack.Outputs.LambdaRoleArn
+      ReservedConcurrentExecutions: 1
+
+  CombinedJourneyHandlerVersion:
+    Type: AWS::Lambda::Version
+    DependsOn: CombinedJourneyHandlerFunction
+    Properties:
+      FunctionName: !Ref CombinedJourneyHandlerFunction
+
+  CombinedJourneyHandlerProvConcLambdaAlias:
+    Type: AWS::Lambda::Alias
+    Properties:
+      FunctionName: !Ref CombinedJourneyHandlerFunction
+      FunctionVersion: !GetAtt CombinedJourneyHandlerVersion.Version
+      Name: provisioned
+      ProvisionedConcurrencyConfig:
+        ProvisionedConcurrentExecutions: 1
+
+  CombinedUserTenantHandlerFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: CombinedUserTenantHandlerLambdaLogGroup
+    Properties:
+      FunctionName: !Sub commovis-api-${Environment}-combinedUserTenantHandler
+      Code:
+        S3Bucket: !Ref S3CodeBucket
+        S3Key: !Ref S3CodeKey
+      Handler: API/v2/CombinedUserTenantHandler.handler
+      Runtime: nodejs20.x
+      MemorySize: 512
+      Timeout: 25
+      Environment:
+        Variables:
+          DYNAMODB_TENANT_TABLE: !Sub commovis-api-Tenant-${Environment}
+          DYNAMODB_JOURNEY_TABLE: !Sub commovis-api-Journey-${Environment}
+          DYNAMODB_JOURNEY_PARTICIPANT_RELATION_TABLE: !Sub commovis-api-Journey_Participant_Relation-${Environment}
+          DYNAMODB_JOURNEY_CATEGORY_TABLE: !Sub commovis-api-Journey_Category-${Environment}
+          DYNAMODB_TREASURE_CHEST_TABLE: !Sub commovis-api-Treasure_Chest-${Environment}
+          DYNAMODB_USER_NOTIFICATIONS_TABLE: !Sub commovis-api-User_Notifications-${Environment}
+          DYNAMODB_USER_PREFERENCES_TABLE: !Sub commovis-api-User_Preferences-${Environment}
+          DYNAMODB_JOURNEY_REUSABLE_TEMPLATES_TABLE: !Sub commovis-api-Journey_Reusable_Templates-${Environment}
+          DYNAMODB_INTERNAL_CURRENCY_TABLE: !Sub commovis-api-Internal_Currency-${Environment}
+          DYNAMODB_INTERNAL_CURRENCY_TRANSFERS_TABLE: !Sub commovis-api-Internal_Currency_Transfers-${Environment}
+          DYNAMODB_LEDGER_ENTRY_TABLE: !Sub commovis-api-Ledger_Entry-${Environment}
+          DYNAMODB_ASSIGNMENT_TABLE: !Sub commovis-api-Assignment-${Environment}
+          stage: !Ref Environment
+          STRIPE_SECRET_KEY: !Ref StripeKey
+          STRIPE_WEBHOOK_SECRET: !Ref StripeWebhookKey
+      Role: !GetAtt IAMStack.Outputs.LambdaRoleArn
+      ReservedConcurrentExecutions: 1
+
+  CombinedUserTenantHandlerVersion:
+    Type: AWS::Lambda::Version
+    DependsOn: CombinedUserTenantHandlerFunction
+    Properties:
+      FunctionName: !Ref CombinedUserTenantHandlerFunction
+
+  CombinedUserTenantHandlerProvConcLambdaAlias:
+    Type: AWS::Lambda::Alias
+    Properties:
+      FunctionName: !Ref CombinedUserTenantHandlerFunction
+      FunctionVersion: !GetAtt CombinedUserTenantHandlerVersion.Version
+      Name: provisioned
+      ProvisionedConcurrencyConfig:
+        ProvisionedConcurrentExecutions: 1
+
+Outputs:
+  ApiEndpoint:
+    Description: API Gateway endpoint URL
+    Value: !GetAtt APIStack.Outputs.ApiEndpoint
+    
+  CloudFrontDomain:
+    Description: CloudFront Distribution Domain
+    Value: !GetAtt APIStack.Outputs.CloudFrontDomain
+
+  CloudFrontDistributionId:
+    Description: CloudFront Distribution ID
+    Value: !GetAtt APIStack.Outputs.CloudFrontDistributionId
