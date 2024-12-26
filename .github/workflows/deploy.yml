@@ -1,0 +1,176 @@
+name: Deploy Commovis API
+
+on:
+  push:
+    branches:
+      - dev  # Deploys to TEST
+    tags:
+      - 'v*'    # Deploys to PROD
+  pull_request:
+    branches: [dev]
+
+env:
+  AWS_REGION: eu-west-1
+  APP_NAME: commovis-lxp
+  SERVICE_NAME: commovis-api
+  NODE_VERSION: '20.x'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm install -g aws-cdk
+        
+      - name: Run tests and linting
+        run: |
+          npm run test
+          npm run lint
+        
+  deploy-infrastructure:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          
+      - name: Set environment based on ref
+        id: env
+        run: |
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            echo "environment=prod" >> $GITHUB_OUTPUT
+            echo "stack_name=${SERVICE_NAME}-prod" >> $GITHUB_OUTPUT
+            echo "stripe_key=STRIPE_KEY_PROD" >> $GITHUB_OUTPUT
+            echo "stripe_webhook_key=STRIPE_WEBHOOK_KEY_PROD" >> $GITHUB_OUTPUT
+            echo "cmv_tenant=CMV_TENANT_PROD" >> $GITHUB_OUTPUT
+            echo "artifact_bucket=${{ secrets.ARTIFACT_BUCKET_PROD }}" >> $GITHUB_OUTPUT
+            echo "templates_bucket=${{ secrets.CF_TEMPLATES_BUCKET_PROD }}" >> $GITHUB_OUTPUT
+          else
+            echo "environment=dev" >> $GITHUB_OUTPUT
+            echo "stack_name=${SERVICE_NAME}-dev" >> $GITHUB_OUTPUT
+            echo "stripe_key=STRIPE_KEY_DEV" >> $GITHUB_OUTPUT
+            echo "stripe_webhook_key=STRIPE_WEBHOOK_KEY_DEV" >> $GITHUB_OUTPUT
+            echo "cmv_tenant=CMV_TENANT_DEV" >> $GITHUB_OUTPUT
+            echo "artifact_bucket=${{ secrets.ARTIFACT_BUCKET_DEV }}" >> $GITHUB_OUTPUT
+            echo "templates_bucket=${{ secrets.CF_TEMPLATES_BUCKET_DEV }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Deploy CloudFormation stack
+        run: |
+          aws cloudformation deploy \
+            --template-file infrastructure/main.yml \
+            --stack-name ${{ steps.env.outputs.stack_name }} \
+            --parameter-overrides \
+              Environment=${{ steps.env.outputs.environment }} \
+              ServiceName=${SERVICE_NAME} \
+              AppName=${APP_NAME} \
+              StripeKey=${{ secrets[steps.env.outputs.stripe_key] }} \
+              StripeWebhookKey=${{ secrets[steps.env.outputs.stripe_webhook_key] }} \
+              CmvTenant=${{ secrets[steps.env.outputs.cmv_tenant] }} \
+            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+            --tags \
+              Environment=${{ steps.env.outputs.environment }} \
+              Service=${SERVICE_NAME}
+
+  deploy-api:
+    needs: deploy-infrastructure
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          
+      - name: Build and package functions
+        run: |
+          npm run build
+          zip -r function.zip . -x "*.git*" "node_modules/*" "infrastructure/*" "*.test.js" "*.spec.js"
+          
+      - name: Upload artifact to S3
+        run: |
+          aws s3 cp function.zip s3://${{ steps.env.outputs.artifact_bucket }}/function.zip
+
+      - name: Deploy V2 API handlers
+        run: |
+          # Deploy Combined Journey Handler
+          aws lambda update-function-code \
+            --function-name ${SERVICE_NAME}-combinedJourneyHandler-${{ steps.env.outputs.environment }} \
+            --s3-bucket ${{ steps.env.outputs.artifact_bucket }} \
+            --s3-key function.zip
+            
+          # Deploy Combined User Tenant Handler  
+          aws lambda update-function-code \
+            --function-name ${SERVICE_NAME}-combinedUserTenantHandler-${{ steps.env.outputs.environment }} \
+            --s3-bucket ${{ steps.env.outputs.artifact_bucket }} \
+            --s3-key function.zip
+
+      - name: Update API Gateway stage
+        run: |
+          API_ID=$(aws apigateway get-rest-apis --query "items[?name=='${SERVICE_NAME}-${{ steps.env.outputs.environment }}'].id" --output text)
+          aws apigateway create-deployment \
+            --rest-api-id $API_ID \
+            --stage-name ${{ steps.env.outputs.environment }}
+
+  post-deployment:
+    needs: deploy-api
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          
+      - name: Invalidate CloudFront cache
+        run: |
+          DISTRIBUTION_ID=$(aws cloudfront list-distributions --query "DistributionList.Items[?Comment=='${SERVICE_NAME}-${{ steps.env.outputs.environment }}'].Id" --output text)
+          aws cloudfront create-invalidation \
+            --distribution-id $DISTRIBUTION_ID \
+            --paths "/*"
+
+      - name: Notify deployment status
+        if: always()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const { status } = process.env
+            const message = status === 'success' 
+              ? '✅ Deployment completed successfully'
+              : '❌ Deployment failed'
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.name,
+              body: message
+            })
